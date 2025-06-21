@@ -2,7 +2,7 @@
   "name": "my-react-app",
   "private": true,
   "version": "0.0.0",
-  "homepage": "https://syeedawais261.github.io/Netflex-reactclone",
+  "homepage": "https://syeedawais261.github.io/hacathon2",
   "type": "module",
   "scripts": {
   "dev": "vite",
