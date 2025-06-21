@@ -1,30 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { auth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from '../firebase-config';
-import { FaEdit, FaTrashAlt, FaArrowRight, FaUserCircle } from 'react-icons/fa';
+import { FaSignOutAlt } from 'react-icons/fa'; // Add this at the top
 import { useNavigate } from 'react-router-dom';
+import {
+  auth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut
+} from '../firebase-config';
+import {
+  FaEdit,
+  FaTrashAlt,
+  FaArrowRight,
+  FaUserCircle,
+  FaArrowLeft,
+  FaCheckCircle
+} from 'react-icons/fa';
 import { doc, setDoc, getDoc, getFirestore } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-
+// import AccountInfo from './Accountinfo';
 import { format } from 'date-fns';
 
 const TodoList = () => {
   const [newTodo, setNewTodo] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [isSignUp, setIsSignUp] = useState(true);
   const [user, setUser] = useState(null);
+  const [profilePic, setProfilePic] = useState(localStorage.getItem('profilePic') || '');
   const [todos, setTodos] = useState({
     'in-process': [],
     'in-progress': [],
     'complete': []
   });
-  const [profilePic, setProfilePic] = useState('');
-  const navigate = useNavigate();
+  const [filterText, setFilterText] = useState('');
+  const [activeSection, setActiveSection] = useState('todos');
   const db = getFirestore();
-  const storage = getStorage();
-
+const navigate = useNavigate();
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
       setUser(currentUser);
@@ -35,12 +48,15 @@ const TodoList = () => {
           setFirstName(docSnapshot.data().firstName || '');
           setLastName(docSnapshot.data().lastName || '');
           setEmail(docSnapshot.data().email || '');
-          setProfilePic(docSnapshot.data().profilePic || '');
         }
       }
     });
     return () => unsubscribe();
   }, [db]);
+
+  useEffect(() => {
+  setProfilePic(localStorage.getItem('profilePic') || '');
+}, []);
 
   const handleAddTodo = () => {
     if (newTodo.trim()) {
@@ -49,14 +65,11 @@ const TodoList = () => {
         text: newTodo,
         checked: false,
         startDate: new Date().toLocaleString(),
-        endDate: null
+        endDate:  null
       };
-      setTodos(prevTodos => ({
-        ...prevTodos,
-        'in-process': [
-          ...prevTodos['in-process'],
-          newTodoItem
-        ]
+      setTodos(prev => ({
+        ...prev,
+        'in-process': [...prev['in-process'], newTodoItem]
       }));
       setNewTodo('');
     }
@@ -79,7 +92,6 @@ const TodoList = () => {
         alert('Sign in successful!');
       }
     } catch (error) {
-      console.error('Error:', error.message);
       alert('Authentication failed!');
     }
   };
@@ -94,35 +106,36 @@ const TodoList = () => {
   };
 
   const handleCheckboxChange = (id, section) => {
-    setTodos(prevTodos => {
-      const updatedSection = prevTodos[section].map(todo => {
-        const formattedEndDate = todo.checked ? format(new Date(), 'yyyy-MM-dd HH:mm:ss') : todo.endDate;
-        return todo.id === id ? { 
-          ...todo, 
-          checked: !todo.checked, 
-          endDate: !todo.checked ? formattedEndDate : todo.endDate 
+    setTodos(prev => {
+      const updatedSection = prev[section].map(todo => {
+        const formattedEndDate = format(new Date(), 'yyyy-MM-dd HH:mm:ss');
+        return todo.id === id ? {
+          ...todo,
+          checked: !todo.checked,
+          endDate: !todo.checked ? formattedEndDate : todo.endDate
         } : todo;
       });
       return {
-        ...prevTodos,
+        ...prev,
         [section]: updatedSection
       };
     });
   };
 
   const handleDeleteTodo = (id, section) => {
-    setTodos(prevTodos => ({
-      ...prevTodos,
-      [section]: prevTodos[section].filter(todo => todo.id !== id)
+    setTodos(prev => ({
+      ...prev,
+      [section]: prev[section].filter(todo => todo.id !== id)
     }));
   };
 
   const handleEditTodo = (id, section) => {
+    if (section === 'complete') return; // Prevent editing in complete section
     const newText = prompt('Edit task text:', todos[section].find(todo => todo.id === id)?.text || '');
     if (newText && newText.trim() !== '') {
-      setTodos(prevTodos => ({
-        ...prevTodos,
-        [section]: prevTodos[section].map(todo =>
+      setTodos(prev => ({
+        ...prev,
+        [section]: prev[section].map(todo =>
           todo.id === id ? { ...todo, text: newText } : todo
         )
       }));
@@ -130,42 +143,24 @@ const TodoList = () => {
   };
 
   const moveTodo = (id, fromSection, toSection) => {
-    setTodos(prevTodos => {
-      const todoToMove = prevTodos[fromSection].find(todo => todo.id === id);
-      if (!todoToMove) return prevTodos;
+    setTodos(prev => {
+      const todoToMove = prev[fromSection].find(todo => todo.id === id);
+      if (!todoToMove) return prev;
+
+      const updatedTodo = toSection === 'complete'
+        ? { ...todoToMove, endDate: format(new Date(), 'yyyy-MM-dd HH:mm:ss') }
+        : todoToMove;
 
       return {
-        ...prevTodos,
-        [fromSection]: prevTodos[fromSection].filter(todo => todo.id !== id),
-        [toSection]: [...prevTodos[toSection], todoToMove]
+        ...prev,
+        [fromSection]: prev[fromSection].filter(todo => todo.id !== id),
+        [toSection]: [...prev[toSection], updatedTodo]
       };
     });
   };
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const storageRef = ref(storage, `profile_pics/${user.uid}/${file.name}`);
-      try {
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        setProfilePic(url);
-
-        // Update Firestore document
-        await setDoc(doc(db, 'users', user.uid), { profilePic: url }, { merge: true });
-      } catch (error) {
-        console.error('Error uploading file:', error.message);
-      }
-    }
-  };
-
-  const getDefaultProfilePic = () => {
-    if (firstName) {
-      const initials = firstName.charAt(0).toUpperCase();
-      return `https://ui-avatars.com/api/?name=${initials}&background=random&color=fff`;
-    }
-    return '/default-profile-pic.png';
-  };
+  const filteredTodos = (section) =>
+    todos[section].filter(todo => todo.text.toLowerCase().includes(filterText.toLowerCase()));
 
   if (!user) {
     return (
@@ -177,59 +172,25 @@ const TodoList = () => {
               {isSignUp && (
                 <>
                   <div className="mb-3">
-                    <label htmlFor="firstName" className="form-label">First Name</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      id="firstName"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      required
-                    />
+                    <label className="form-label">First Name</label>
+                    <input type="text" className="form-control" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
                   </div>
                   <div className="mb-3">
-                    <label htmlFor="lastName" className="form-label">Last Name</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      id="lastName"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      required
-                    />
+                    <label className="form-label">Last Name</label>
+                    <input type="text" className="form-control" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
                   </div>
                 </>
               )}
               <div className="mb-3">
-                <label htmlFor="email" className="form-label">Email</label>
-                <input
-                  type="email"
-                  className="form-control"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
+                <label className="form-label">Email</label>
+                <input type="email" className="form-control" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
               <div className="mb-3">
-                <label htmlFor="password" className="form-label">Password</label>
-                <input
-                  type="password"
-                  className="form-control"
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                <label className="form-label">Password</label>
+                <input type="password" className="form-control" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
               <button type="submit" className="btn btn-primary">{isSignUp ? 'Sign Up' : 'Sign In'}</button>
-              <button
-                type="button"
-                className="btn btn-secondary ms-2"
-                onClick={() => setIsSignUp(!isSignUp)}
-              >
-                {isSignUp ? 'Switch to Sign In' : 'Switch to Sign Up'}
-              </button>
+              <button type="button" className="btn btn-secondary ms-2" onClick={() => setIsSignUp(!isSignUp)}>{isSignUp ? 'Switch to Sign In' : 'Switch to Sign Up'}</button>
             </form>
           </div>
         </div>
@@ -239,148 +200,136 @@ const TodoList = () => {
 
   return (
     <div className="container mt-4">
-      <h1 style={{display:"flex", justifyContent:"center", color:"blue"}}>Project Managment App</h1>
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <div className="profile-pic-container">
-          <img
-            src={profilePic || getDefaultProfilePic()}
-            alt="Profile"
-            className="rounded-circle profile-pic"
-          />
+      <h1 className="text-center text-primary">Project Management App</h1>
+
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h5>Welcome, {firstName} {lastName}</h5>
+        <div>
+          {/* <button className={`btn btn-outline-${activeSection === 'todos' ? 'primary' : 'secondary'} me-2`} onClick={() => setActiveSection('todos')}>Tasks</button> */}
+        <div className="dropdown">
+  <button
+  className="border-0 bg-transparent p-0"
+  type="button"
+  data-bs-toggle="dropdown"
+  aria-expanded="false"
+  style={{
+    borderRadius: '50%',
+    width: '42px',
+    height: '42px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgb(245, 245, 245)',
+    transition: 'background-color 0.2s',
+    cursor: 'pointer',
+    overflow: 'hidden'
+  }}
+  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgb(230, 230, 230)')}
+  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'rgb(245, 245, 245)')}
+>
+  {profilePic ? (
+    <img
+      src={profilePic}
+      alt="Profile"
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        borderRadius: '50%'
+      }}
+    />
+  ) : (
+    <FaUserCircle size={28} color="#333" />
+  )}
+</button>
+
+
+  <ul className="dropdown-menu dropdown-menu-end mt-2">
+    <li>
+      <button className="dropdown-item" onClick={() => navigate('/accountinfo')}>
+        Account Info
+      </button>
+    </li>
+    <li>
+  <button className="dropdown-item text-danger d-flex align-items-center gap-2" onClick={handleSignOut}>
+    <FaSignOutAlt /> Sign Out
+  </button>
+</li>
+  </ul>
+</div>
+
+
+        </div>
+      </div>
+
+      {activeSection === 'profile' ? (
+        <div className="card p-4 shadow">
+          <h4>User Profile</h4>
+          <p><strong>First Name:</strong> {firstName}</p>
+          <p><strong>Last Name:</strong> {lastName}</p>
+          <p><strong>Email:</strong> {email}</p>
+        </div>
+      ) : (
+        <>
           <input
-            type="file"
-            className="profile-pic-upload"
-            onChange={handleFileChange}
+            type="text"
+            className="form-control mb-2"
+            placeholder="Filter tasks..."
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
           />
-        </div>
-        <button className="btn btn-secondary" onClick={handleSignOut}>
-          <FaUserCircle className="me-2" />
-          Sign Out
-        </button>
-      </div>
-      <div className="mb-3">
-        <input
-          type="text"
-          className="form-control"
-          placeholder="Add a new task"
-          value={newTodo}
-          onChange={(e) => setNewTodo(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && handleAddTodo()}
-        />
-      </div>
-      <div className="d-flex justify-content-between mb-3">
-        <button className="btn btn-primary" onClick={handleAddTodo}>
-          Add Task
-        </button>
-      </div>
-      <div className="todo-sections">
-        <div className="todo-section mb-4">
-          <h5>In Process</h5>
-          <ul className="list-group">
-            {todos['in-process'].map(todo => (
-              <li key={todo.id} className="list-group-item d-flex justify-content-between align-items-center">
-                <div>
-                  <input
-                    type="checkbox"
-                    checked={todo.checked}
-                    onChange={() => handleCheckboxChange(todo.id, 'in-process')}
-                    className="me-2"
-                  />
-                  {todo.text}
-                  <div className="text-muted">
-                    <small>Start Date: {todo.startDate}</small>
-                  </div>
-                </div>
-                <div>
-                  <button
-                    className="btn btn-link text-decoration-none"
-                    onClick={() => handleEditTodo(todo.id, 'in-process')}
-                  >
-                    <FaEdit />
-                  </button>
-                  <button
-                    className="btn btn-link text-decoration-none"
-                    onClick={() => handleDeleteTodo(todo.id, 'in-process')}
-                  >
-                    <FaTrashAlt />
-                  </button>
-                  <button
-                    className="btn btn-link text-decoration-none"
-                    onClick={() => moveTodo(todo.id, 'in-process', 'in-progress')}
-                  >
-                    <FaArrowRight />
-                  </button>
-                </div>
-              </li>
+
+          <div className="mb-3 d-flex gap-2">
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Add a new task"
+              value={newTodo}
+              onChange={(e) => setNewTodo(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddTodo()}
+            />
+            <button className="btn btn-primary" onClick={handleAddTodo}>Add Task</button>
+          </div>
+
+          <div className="row">
+            {['in-process', 'in-progress', 'complete'].map(section => (
+              <div className="col-md-4" key={section}>
+                <h5 className="text-capitalize">{section.replace('-', ' ')}</h5>
+                <ul className="list-group">
+                  {filteredTodos(section).map(todo => (
+                    <li key={todo.id} className="list-group-item d-flex justify-content-between align-items-center">
+                      <div>
+                        {section === 'complete' ? (
+                          <FaCheckCircle className="text-success me-2" />
+                        ) : (
+                          <input type="checkbox" checked={todo.checked} onChange={() => handleCheckboxChange(todo.id, section)} className="me-2" />
+                        )}
+                        {todo.text}
+                        <div className="text-muted">
+                          <small>Start: {todo.startDate}</small><br />
+                          {todo.endDate && <small>End: {todo.endDate}</small>}
+                        </div>
+                      </div>
+                      <div className="d-flex gap-2">
+                        {section !== 'complete' && (
+                          <button className="btn btn-sm btn-link" onClick={() => moveTodo(todo.id, section, section === 'in-process' ? 'in-progress' : 'complete')}><FaArrowRight /></button>
+                        )}
+                        {section === 'in-progress' && (
+                          <button className="btn btn-sm btn-link" onClick={() => moveTodo(todo.id, section, 'in-process')}><FaArrowLeft /></button>
+                        )}
+                        {section !== 'complete' && (
+                          <button className="btn btn-sm btn-link" onClick={() => handleEditTodo(todo.id, section)}><FaEdit /></button>
+                        )}
+                        <button className="btn btn-sm btn-link text-danger" onClick={() => handleDeleteTodo(todo.id, section)}><FaTrashAlt /></button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
-        </div>
-        <div className="todo-section mb-4">
-          <h5>In Progress</h5>
-          <ul className="list-group">
-            {todos['in-progress'].map(todo => (
-              <li key={todo.id} className="list-group-item d-flex justify-content-between align-items-center">
-                <div>
-                  <input
-                    type="checkbox"
-                    checked={todo.checked}
-                    onChange={() => handleCheckboxChange(todo.id, 'in-progress')}
-                    className="me-2"
-                  />
-                  {todo.text}
-                  <div className="text-muted">
-                    <small>Start Date: {todo.startDate}</small><br />
-                  </div>
-                </div>
-                <div>
-                  <button
-                    className="btn btn-link text-decoration-none"
-                    onClick={() => handleEditTodo(todo.id, 'in-progress')}
-                  >
-                    <FaEdit />
-                  </button>
-                  <button
-                    className="btn btn-link text-decoration-none"
-                    onClick={() => handleDeleteTodo(todo.id, 'in-progress')}
-                  >
-                    <FaTrashAlt />
-                  </button>
-                  <button
-                    className="btn btn-link text-decoration-none"
-                    onClick={() => moveTodo(todo.id, 'in-progress', 'complete')}
-                  >
-                    <FaArrowRight />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="todo-section">
-          <h5>Complete</h5>
-          <ul className="list-group">
-            {todos['complete'].map(todo => (
-              <li key={todo.id} className="list-group-item d-flex justify-content-between align-items-center">
-                <div>
-                  {todo.text}
-                  <div className="text-muted">
-                    <small>Start Date: {todo.startDate}</small><br />
-                    <small>End Date: {todo.endDate}</small>
-                  </div>
-                </div>
-                <div>
-                  <button
-                    className="btn btn-link text-decoration-none"
-                    onClick={() => handleDeleteTodo(todo.id, 'complete')}
-                  >
-                    <FaTrashAlt />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
