@@ -1,13 +1,13 @@
-// vite.config.js
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
+// Replace 'your-repo-name' with your actual GitHub repo name
 export default defineConfig({
+  base: '/hacathon2/',  // 👈 IMPORTANT: must match GitHub repo name
   plugins: [react()],
   build: {
     rollupOptions: {
-      input: 'index.html', // Ensure that this points to the correct location
+      input: 'index.html', // optional, can be omitted if index.html is in root
     }
   }
 });
