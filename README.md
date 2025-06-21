@@ -1,8 +1,24 @@
-# React + Vite
+# Hackathon Project
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern web application built using **React.js**, **Vite**, **Bootstrap**, and **Firebase** as part of a hackathon project.
 
-Currently, two official plugins are available:
+## 🚀 Live Demo
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+🔗 [Click here to view the live site](https://syeedawais261.github.io/hackathon)
+
+## 🛠️ Tech Stack
+
+- React.js
+- Vite
+- Bootstrap 5
+- Firebase
+- React Router DOM
+- React Icons
+
+## 📦 How to Run Locally
+
+```bash
+git clone https://github.com/SYEEDAWAIS261/hackathon.git
+cd hackathon
+npm install
+npm run dev
